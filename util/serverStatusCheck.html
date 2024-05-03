@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Website Service Status</title>
+</head>
+
+<script>
+	var xmlHttp = false;
+
+	// Create a new XMLHttpRequest object to talk to the Web server
+	xmlHttp = false;
+	/*@cc_on @*/
+	/*@if (@_jscript_version >= 5)
+    try {
+      xmlHttp = new ActiveXObject("Msxml2.XMLHTTP");
+    } catch (e) {
+      try {
+        xmlHttp = new ActiveXObject("Microsoft.XMLHTTP");
+      } catch (e2) {
+       xmlHttp = false;
+     }
+    }
+    @end @*/
+
+
+	if (!xmlHttp && typeof XMLHttpRequest != 'undefined') {
+		xmlHttp = new XMLHttpRequest();
+	}
+
+	var sLastHostName='';
+	function checkSiteStatus(sHostName)
+	{
+		sLastHostName = sHostName;
+		// Make JSON request
+		xmlHttp.open("GET","util/serverStatusCheckService.jsp?HostName=" + sHostName);
+		xmlHttp.onreadystatechange = StateChangeForJSON;
+		xmlHttp.send(null);
+	}
+	function StateChangeForJSON()
+	{
+		if(xmlHttp.readyState == 4 && xmlHttp.status == 200)
+		{
+			var jsonObj = JSON.parse(xmlHttp.responseText);
+			var jsonFetchHostStatus = jsonObj["HostStatus"];
+			var jsonFetchHostName=jsonObj["HostName"];
+			// Get JSON values and output
+			var hostNameElement = document.getElementById('FetchHostName');
+			hostNameElement.textContent = sanitizeHTML(jsonFetchHostName);
+			var hostStatusElement = document.getElementById('FetchHostStatus');
+			hostStatusElement.textContent = sanitizeHTML(jsonFetchHostStatus);
+		}
+		else if(xmlHttp.readyState == 4)
+		{
+			var errorText = '';
+			switch(xmlHttp.status) {
+				case 500:
+					errorText = 'The service returned an error. Please be patient while our administrators fix the issue.';
+					break;
+				case 404:
+					errorText = 'The service returned an error. The status service appears to not be available';
+					break;
+				case 401:
+					errorText = 'The service returned a 401 unauthorized error, indicating it was implemented incorrectly';
+					break;
+				case 302:
+					errorText = 'The service returned a 302 redirect, indicating it was implemented incorrectly';
+					break;
+				default:
+					errorText = 'An unknown error occurred while fetching the status.';
+					break;
+			}
+			var hostNameElement = document.getElementById('FetchHostName');
+			hostNameElement.textContent = sanitizeHTML(sLastHostName);
+			var hostStatusElement = document.getElementById('FetchHostStatus');
+			hostStatusElement.textContent = errorText;
+		}
+	}
+
+	// Function to sanitize HTML to prevent XSS
+	function sanitizeHTML(str) {
+		var temp = document.createElement('div');
+		temp.textContent = str;
+		return temp.innerHTML;
+	}
+
+</script>
+
+<body>
+
+<h1>Server Status Check</h1>
+<table border=0>
+	<tr>
+		<td width=200 valign=top>
+			Hostname:
+		</td>
+		<td align=left valign=top>
+			<div id="FetchHostName" style="font-size:12pt;color:blue;width:200px"></div>
+
+		</td>
+	</tr>
+	<tr>
+		<td width=200 valign=top>
+			Status:
+		</td>
+		<td align=left valign=top>
+			<div id="FetchHostStatus" style="font-size:12pt;width:200px"></div>
+		</td>
+	</tr>
+	<tr>
+		<td align=right valign=top colspan=2>
+			&nbsp;
+		</td>
+	</tr>
+	<tr>
+		<td align=center valign=top colspan=2>
+			<form action="javascript:checkSiteStatus('AltoroMutual')" id="frmJsonSubmit">
+				<input type="submit" value="Check Status">
+			</form>
+		</td>
+	</tr>
+</table>
+
+
+</body>
+</html>
