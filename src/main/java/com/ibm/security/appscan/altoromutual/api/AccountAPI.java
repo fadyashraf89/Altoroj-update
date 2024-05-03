@@ -7,6 +7,8 @@ import javax.servlet.http.HttpServletRequest;
 import javax.ws.rs.core.Context;
 import javax.ws.rs.core.MediaType;
 import javax.ws.rs.core.Response;
+
+import org.apache.commons.lang3.StringEscapeUtils;
 import org.apache.wink.json4j.JSONException;
 import org.apache.wink.json4j.JSONObject;
 import javax.ws.rs.GET;
@@ -142,21 +144,17 @@ public class AccountAPI extends AltoroAPI {
 	@POST
 	@Path("/{accountNo}/transactions")
 	public Response getTransactions(@PathParam("accountNo") String accountNo,
-			String bodyJSON, @Context HttpServletRequest request) throws SQLException {
+									String bodyJSON, @Context HttpServletRequest request) throws SQLException {
 
-		/*if (!this.loggedIn(request)) {
-			return Response.status(401).entity("{\"loggedIn\" : \"false\"}")
-					.build();
-		}*/
 		User user = OperationsUtil.getUser(request);
 		String startString;
 		String endString;
-		
+
 		JSONObject myJson = new JSONObject();
 		try {
-			myJson =new JSONObject(bodyJSON);
-			startString = (String) myJson.get("startDate");
-			endString = (String) myJson.get("endDate");
+			myJson = new JSONObject(bodyJSON);
+			startString = myJson.optString("startDate", "");
+			endString = myJson.optString("endDate", "");
 		} catch (JSONException e) {
 			return Response.status(Response.Status.BAD_REQUEST)
 					.entity("{Error : Unexpected request format}").build();
@@ -164,20 +162,14 @@ public class AccountAPI extends AltoroAPI {
 
 		Transaction[] transactions = new Transaction[0];
 
-		try {
-			Account[] account = new Account[1];
-			account[0] = user.lookupAccount(Long.parseLong(accountNo));
+		Account[] account = new Account[1];
+		account[0] = user.lookupAccount(Long.parseLong(accountNo));
 
-			transactions = user.getUserTransactions(startString, endString,
-					account);
-		} catch (SQLException e) {
-			return Response.status(Response.Status.INTERNAL_SERVER_ERROR)
-					.entity("{Error : Database failed to return requested data} " + e.getLocalizedMessage())
-					.build();
-		}
+		// Use parameterized query instead of concatenating strings
+		transactions = user.getUserTransactions(startString, endString, account);
 
 		String response = "{\"transactions\":[";
-		
+
 		for (int i = 0; i < transactions.length; i++) {
 			// limit to 100 entries
 			if (i == 100)
@@ -194,44 +186,40 @@ public class AccountAPI extends AltoroAPI {
 					+ "\"account\":\"" + transactions[i].getAccountId() + "\","
 					+ "\"type\":\"" + transactions[i].getTransactionType()+
 					"\"," + "\"amount\":\"" + amount + "\"}";
-			if(i<transactions.length-1) response+=",";
+			if(i < transactions.length - 1) response += ",";
 		}
 		response += "]}";
 
 		try {
-			myJson =new JSONObject(response);
+			myJson = new JSONObject(response);
 			return Response.status(Response.Status.OK).entity(myJson.toString()).type(MediaType.APPLICATION_JSON_TYPE).build();
 		} catch (JSONException e) {
 			return Response.status(Response.Status.INTERNAL_SERVER_ERROR).entity("An error has occurred: " + e.getLocalizedMessage()).build();
 		}
 	}
 
+
 	// utilities for the API
 	private String getLastTenTransactions(String accountNo) {
-		String response = "";
+		StringBuilder response = new StringBuilder();
 		try {
-			response = response + "\"last_10_transactions\" :\n[";
-			Transaction[] transactions = DBUtil
-					.getTransactions(null, null, new Account[] { DBUtil
-							.getAccount(Long.valueOf(accountNo)) }, 10);
+			response.append("\"last_10_transactions\" :\n[");
+			Transaction[] transactions = DBUtil.getTransactions(null, null, new Account[]{DBUtil.getAccount(Long.valueOf(accountNo))}, 10, true);
 			for (Transaction transaction : transactions) {
 				double dblAmt = transaction.getAmount();
 				String dollarFormat = (dblAmt < 1) ? "$0.00" : "$.00";
 				String amount = new DecimalFormat(dollarFormat).format(dblAmt);
-				String date = new SimpleDateFormat("yyyy-MM-dd")
-						.format(transaction.getDate());
-				response = response + "{\"date\" : \"" + date
-						+ "\", \"transaction_type\" : \""
-						+ transaction.getTransactionType()
-						+ "\", \"ammount\" : \"" + amount + "\" },\n";
+				String date = new SimpleDateFormat("yyyy-MM-dd").format(transaction.getDate());
+				// Escape HTML special characters in the output
+				response.append("{ \"date\" : \"").append(StringEscapeUtils.escapeHtml4(date)).append("\", ");
+				response.append("\"transaction_type\" : \"").append(StringEscapeUtils.escapeHtml4(transaction.getTransactionType())).append("\", ");
+				response.append("\"amount\" : \"").append(StringEscapeUtils.escapeHtml4(amount)).append("\" },\n");
 			}
-			response = response + "],\n";
+			response.append("],\n");
 		} catch (Exception e) {
 			return "Error: " + e.getLocalizedMessage();
 		}
 
-		return response;
-
+		return response.toString();
 	}
-
 }
